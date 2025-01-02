@@ -142,7 +142,7 @@ const CollectorsList = () => {
       <div className="flex justify-end mb-4">
         <Button 
           onClick={handlePrintAll}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 bg-dashboard-accent1 hover:bg-dashboard-accent1/80"
         >
           <Printer className="w-4 h-4" />
           Print All Members
@@ -159,7 +159,7 @@ const CollectorsList = () => {
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white font-medium">
+                  <div className="w-10 h-10 rounded-full bg-dashboard-accent1 flex items-center justify-center text-white font-medium">
                     {collector.prefix}
                   </div>
                   <div>
@@ -176,13 +176,11 @@ const CollectorsList = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
-                    size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePrintCollector(collector.name || '');
                     }}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 bg-dashboard-accent2 hover:bg-dashboard-accent2/80"
                   >
                     <Printer className="w-4 h-4" />
                     Print Members
