@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 import { Database } from '@/integrations/supabase/types';
-import { UserCheck, ChevronDown, User } from 'lucide-react';
+import { UserCheck, User } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -17,7 +17,7 @@ const CollectorsList = () => {
     queryKey: ['members_collectors'],
     queryFn: async () => {
       console.log('Fetching collectors from members_collectors...');
-      const { data, error } = await supabase
+      const { data: collectorsData, error: collectorsError } = await supabase
         .from('members_collectors')
         .select(`
           id,
@@ -28,50 +28,21 @@ const CollectorsList = () => {
           phone,
           active,
           created_at,
-          updated_at
+          updated_at,
+          members:members!collector(count)
         `)
         .order('number', { ascending: true })
         .throwOnError();
       
-      if (error) {
-        console.error('Error fetching collectors:', error);
-        throw error;
+      if (collectorsError) {
+        console.error('Error fetching collectors:', collectorsError);
+        throw collectorsError;
       }
       
-      console.log('Fetched collectors:', data);
-      return data as MemberCollector[];
+      console.log('Fetched collectors:', collectorsData);
+      return collectorsData;
     },
   });
-
-  const { data: members } = useQuery({
-    queryKey: ['members'],
-    queryFn: async () => {
-      console.log('Fetching all members...');
-      const { data, error } = await supabase
-        .from('members')
-        .select('*')
-        .throwOnError();
-      
-      if (error) {
-        console.error('Error fetching members:', error);
-        throw error;
-      }
-      
-      console.log('Fetched total members:', data?.length);
-      return data as Member[];
-    },
-  });
-
-  // Group members by collector
-  const membersByCollector = members?.reduce((acc, member) => {
-    if (member.collector) {
-      if (!acc[member.collector]) {
-        acc[member.collector] = [];
-      }
-      acc[member.collector].push(member);
-    }
-    return acc;
-  }, {} as Record<string, Member[]>);
 
   if (collectorsLoading) return <div className="text-center py-4">Loading collectors...</div>;
   if (collectorsError) return <div className="text-center py-4 text-red-500">Error loading collectors: {collectorsError.message}</div>;
@@ -81,7 +52,7 @@ const CollectorsList = () => {
     <div className="space-y-4">
       <Accordion type="single" collapsible className="space-y-4">
         {collectors.map((collector) => {
-          const collectorMembers = membersByCollector?.[collector.name || ''] || [];
+          const memberCount = collector.members?.length || 0;
           
           return (
             <AccordionItem
@@ -103,7 +74,7 @@ const CollectorsList = () => {
                       <div className="flex items-center gap-2 text-sm text-dashboard-text">
                         <UserCheck className="w-4 h-4" />
                         <span>Collector</span>
-                        <span className="text-purple-400">({collectorMembers.length} members)</span>
+                        <span className="text-purple-400">({memberCount} members)</span>
                       </div>
                     </div>
                   </div>
@@ -120,19 +91,8 @@ const CollectorsList = () => {
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 <div className="space-y-3 mt-2">
-                  {collectorMembers.length > 0 ? (
-                    collectorMembers.map((member) => (
-                      <div 
-                        key={member.id}
-                        className="flex items-center gap-3 p-3 bg-black/20 rounded-lg"
-                      >
-                        <User className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm font-medium text-white">{member.full_name}</p>
-                          <p className="text-xs text-gray-400">Member #{member.member_number}</p>
-                        </div>
-                      </div>
-                    ))
+                  {memberCount > 0 ? (
+                    <CollectorMembers collectorName={collector.name || ''} />
                   ) : (
                     <p className="text-sm text-gray-400">No members assigned to this collector</p>
                   )}
@@ -144,6 +104,40 @@ const CollectorsList = () => {
       </Accordion>
     </div>
   );
+};
+
+const CollectorMembers = ({ collectorName }: { collectorName: string }) => {
+  const { data: members, isLoading } = useQuery({
+    queryKey: ['collector_members', collectorName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('collector', collectorName)
+        .order('created_at', { ascending: false })
+        .limit(10)
+        .throwOnError();
+      
+      if (error) throw error;
+      return data as Member[];
+    },
+  });
+
+  if (isLoading) return <div>Loading members...</div>;
+  if (!members?.length) return null;
+
+  return members.map((member) => (
+    <div 
+      key={member.id}
+      className="flex items-center gap-3 p-3 bg-black/20 rounded-lg"
+    >
+      <User className="w-5 h-5 text-gray-400" />
+      <div>
+        <p className="text-sm font-medium text-white">{member.full_name}</p>
+        <p className="text-xs text-gray-400">Member #{member.member_number}</p>
+      </div>
+    </div>
+  ));
 };
 
 export default CollectorsList;

@@ -12,18 +12,28 @@ import { useState } from 'react';
 import { Switch } from "@/components/ui/switch";
 import { Bell, Globe, Users, UserCheck } from 'lucide-react';
 
+const MEMBERS_PER_PAGE = 10;
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
 
-  const { data: members, isLoading: membersLoading, error: membersError } = useQuery({
-    queryKey: ['members'],
+  const { data: membersData, isLoading: membersLoading, error: membersError } = useQuery({
+    queryKey: ['members', currentPage, searchTerm],
     queryFn: async () => {
       console.log('Fetching members...');
-      const { data, error } = await supabase
+      let query = supabase
         .from('members')
-        .select('*')
+        .select('*', { count: 'exact' });
+      
+      if (searchTerm) {
+        query = query.or(`full_name.ilike.%${searchTerm}%,member_number.ilike.%${searchTerm}%,collector.ilike.%${searchTerm}%`);
+      }
+      
+      const { data, count, error } = await query
         .order('created_at', { ascending: false })
+        .range(currentPage * MEMBERS_PER_PAGE, (currentPage + 1) * MEMBERS_PER_PAGE - 1)
         .throwOnError();
       
       if (error) {
@@ -31,8 +41,11 @@ const Index = () => {
         throw error;
       }
       
-      console.log('Fetched members count:', data?.length);
-      return data as Tables<'members'>[];
+      console.log('Fetched members count:', count);
+      return { 
+        members: data as Tables<'members'>[], 
+        totalCount: count || 0 
+      };
     },
   });
 
@@ -49,7 +62,7 @@ const Index = () => {
     },
   });
 
-  const filteredMembers = members?.filter(member => {
+  const filteredMembers = membersData?.members?.filter(member => {
     if (!searchTerm) return true;
     
     const searchLower = searchTerm.toLowerCase();
