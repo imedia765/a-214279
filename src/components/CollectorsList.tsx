@@ -31,16 +31,35 @@ const CollectorsList = () => {
           updated_at,
           members:members!collector(count)
         `)
-        .order('number', { ascending: true })
-        .throwOnError();
+        .order('number', { ascending: true });
       
       if (collectorsError) {
         console.error('Error fetching collectors:', collectorsError);
         throw collectorsError;
       }
+
+      // Get the total member count
+      const { count: totalMembers } = await supabase
+        .from('members')
+        .select('*', { count: 'exact', head: true });
+
+      console.log('Total members:', totalMembers);
       
-      console.log('Fetched collectors:', collectorsData);
-      return collectorsData;
+      // For each collector, get their member count
+      const collectorsWithCounts = await Promise.all(collectorsData?.map(async (collector) => {
+        const { count } = await supabase
+          .from('members')
+          .select('*', { count: 'exact', head: true })
+          .eq('collector', collector.name);
+        
+        return {
+          ...collector,
+          memberCount: count || 0
+        };
+      }) || []);
+
+      console.log('Collectors with counts:', collectorsWithCounts);
+      return collectorsWithCounts;
     },
   });
 
@@ -51,9 +70,7 @@ const CollectorsList = () => {
   return (
     <div className="space-y-4">
       <Accordion type="single" collapsible className="space-y-4">
-        {collectors.map((collector) => {
-          const memberCount = collector.members?.length || 0;
-          
+        {collectors.map((collector) => {          
           return (
             <AccordionItem
               key={collector.id}
@@ -74,7 +91,7 @@ const CollectorsList = () => {
                       <div className="flex items-center gap-2 text-sm text-dashboard-text">
                         <UserCheck className="w-4 h-4" />
                         <span>Collector</span>
-                        <span className="text-purple-400">({memberCount} members)</span>
+                        <span className="text-purple-400">({collector.memberCount} members)</span>
                       </div>
                     </div>
                   </div>
@@ -91,7 +108,7 @@ const CollectorsList = () => {
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 <div className="space-y-3 mt-2">
-                  {memberCount > 0 ? (
+                  {collector.memberCount > 0 ? (
                     <CollectorMembers collectorName={collector.name || ''} />
                   ) : (
                     <p className="text-sm text-gray-400">No members assigned to this collector</p>
@@ -115,8 +132,7 @@ const CollectorMembers = ({ collectorName }: { collectorName: string }) => {
         .select('*')
         .eq('collector', collectorName)
         .order('created_at', { ascending: false })
-        .limit(10)
-        .throwOnError();
+        .limit(10);
       
       if (error) throw error;
       return data as Member[];
