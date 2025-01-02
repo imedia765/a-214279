@@ -36,10 +36,16 @@ export const generateMembersPDF = (members: Member[], title: string = 'All Membe
   ];
 
   // Generate tables for each collector group
-  Object.entries(membersByCollector).forEach(([collector, collectorMembers]) => {
-    // Add collector section header
+  Object.entries(membersByCollector).forEach(([collector, collectorMembers], index) => {
+    // Start new page for each collector (except the first one)
+    if (index > 0) {
+      doc.addPage();
+      startY = 20;
+    }
+
+    // Add collector section header with member count
     doc.setFontSize(14);
-    doc.text(`Collector: ${collector}`, 14, startY);
+    doc.text(`Collector: ${collector} (${collectorMembers.length} members)`, 14, startY);
     startY += 10;
 
     // Transform the data into rows
@@ -65,12 +71,6 @@ export const generateMembersPDF = (members: Member[], title: string = 'All Membe
     // Update startY for next section, adding extra space
     const finalY = (doc as any).lastAutoTable.finalY;
     startY = finalY + 15;
-
-    // Add new page if needed
-    if (startY > doc.internal.pageSize.height - 20) {
-      doc.addPage();
-      startY = 20;
-    }
   });
 
   // Save the PDF
