@@ -28,8 +28,7 @@ const CollectorsList = () => {
           phone,
           active,
           created_at,
-          updated_at,
-          members:members!collector(count)
+          updated_at
         `)
         .order('number', { ascending: true });
       
@@ -38,19 +37,14 @@ const CollectorsList = () => {
         throw collectorsError;
       }
 
-      // Get the total member count
-      const { count: totalMembers } = await supabase
-        .from('members')
-        .select('*', { count: 'exact', head: true });
-
-      console.log('Total members:', totalMembers);
-      
       // For each collector, get their member count
       const collectorsWithCounts = await Promise.all(collectorsData?.map(async (collector) => {
         const { count } = await supabase
           .from('members')
           .select('*', { count: 'exact', head: true })
           .eq('collector', collector.name);
+        
+        console.log(`Collector ${collector.name} has ${count} members`);
         
         return {
           ...collector,
