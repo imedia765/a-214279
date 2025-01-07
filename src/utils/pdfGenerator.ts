@@ -18,7 +18,7 @@ export const generateMembersPDF = (members: Member[], title: string = "Members R
   startY += 10;
 
   // Group members by collector
-  const membersByCollector = members.reduce((acc: { [key: string]: Member[] }, member) => {
+  const membersByCollector = members.reduce<{ [key: string]: Member[] }>((acc, member) => {
     const collector = member.collector || 'Unassigned';
     if (!acc[collector]) {
       acc[collector] = [];
