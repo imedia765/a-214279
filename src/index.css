@@ -1,46 +1,51 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
- 
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 262 83% 66%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --secondary: 199 89% 48%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 301 91% 61%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.75rem;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
   }
 }
 
 @layer base {
+  * {
+    @apply border-border;
+  }
   body {
-    @apply bg-dashboard-dark text-dashboard-text;
+    @apply bg-background text-foreground;
   }
 }
 
-.glass-card {
-  @apply bg-dashboard-card bg-opacity-50 backdrop-blur-lg border border-white/10 rounded-xl;
+.code-editor {
+  @apply font-mono text-sm;
+  background-color: #151820;
 }
 
-.dashboard-card {
-  @apply p-6 glass-card transition-all duration-300 hover:border-white/20;
-}
-
-.metric-card {
-  @apply relative flex flex-col items-center justify-center p-8 dashboard-card;
+.gradient-border {
+  position: relative;
+  border: double 1px transparent;
+  border-radius: 8px;
+  background-image: linear-gradient(#1A1F2C, #1A1F2C), 
+    linear-gradient(to right, #8B5CF6, #0EA5E9);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
 }
