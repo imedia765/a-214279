@@ -2,7 +2,10 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend, LineChart, Line } from 'recharts';
-import { Activity, Users, Code, GitBranch, Clock, Cpu } from 'lucide-react';
+import { Activity, Users, Code, GitBranch, Clock, Cpu, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { TestResults } from '@/components/analytics/TestResults';
+import { TestCoverage } from '@/components/analytics/TestCoverage';
+import { PerformanceMetrics } from '@/components/analytics/PerformanceMetrics';
 
 const mockData = {
   codeActivity: [
@@ -62,7 +65,7 @@ const Analytics = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
             <CardTitle>Code Activity</CardTitle>
@@ -104,6 +107,14 @@ const Analytics = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="space-y-6">
+        <TestResults />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TestCoverage />
+          <PerformanceMetrics />
+        </div>
       </div>
     </div>
   );
