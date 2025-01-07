@@ -2,13 +2,13 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-const R2D2Scene = () => {
+const AppShowcaseScene = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Scene setup with improved configuration
+    // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1a1f2c);
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -22,105 +22,64 @@ const R2D2Scene = () => {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     containerRef.current.appendChild(renderer.domElement);
 
-    // Add OrbitControls with enhanced configuration
+    // Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.maxDistance = 10;
     controls.minDistance = 3;
 
-    // Create R2D2 body with improved materials
-    const bodyGeometry = new THREE.CylinderGeometry(1, 1.2, 2, 32);
-    const bodyMaterial = new THREE.MeshPhysicalMaterial({ 
-      color: 0xffffff,
-      metalness: 0.9,
-      roughness: 0.1,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.1
+    // Create central platform
+    const platformGeometry = new THREE.CylinderGeometry(2, 2, 0.2, 32);
+    const platformMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x6366f1,
+      metalness: 0.8,
+      roughness: 0.2,
+      clearcoat: 0.3
     });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.castShadow = true;
-    body.receiveShadow = true;
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.receiveShadow = true;
+    scene.add(platform);
 
-    // Create detailed head
-    const headGeometry = new THREE.SphereGeometry(0.8, 32, 32);
-    const headMaterial = new THREE.MeshPhysicalMaterial({ 
-      color: 0xffffff,
-      metalness: 0.9,
-      roughness: 0.1,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.1
-    });
-    const head = new THREE.Mesh(headGeometry, headMaterial);
-    head.position.y = 1.4;
-    head.castShadow = true;
-
-    // Create eye lens with improved material
-    const eyeGeometry = new THREE.CircleGeometry(0.2, 32);
-    const eyeMaterial = new THREE.MeshPhysicalMaterial({ 
-      color: 0x000000,
-      metalness: 1,
-      roughness: 0,
-      transmission: 0.9,
-      thickness: 0.5
-    });
-    const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    eye.position.set(0, 1.4, 0.8);
-    eye.rotation.y = Math.PI;
-
-    // Create blue details with enhanced glowing effect
-    const detailGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.1);
-    const detailMaterial = new THREE.MeshPhongMaterial({ 
-      color: 0x00ffff,
-      emissive: 0x0066ff,
-      emissiveIntensity: 0.5,
-      shininess: 100
-    });
-
-    const details = [];
-    const detailPositions = [
-      { x: 0.5, y: 0, z: 1 },
-      { x: -0.5, y: 0.5, z: 1 },
-      { x: 0.3, y: -0.5, z: 1 },
-      { x: -0.3, y: 0.2, z: 1 }
+    // Create floating features
+    const features = [
+      { name: 'Code', color: 0x8b5cf6, position: { x: 1.5, y: 1, z: 0 } },
+      { name: 'Research', color: 0x0ea5e9, position: { x: -1.5, y: 1, z: 0 } },
+      { name: 'Analytics', color: 0xec4899, position: { x: 0, y: 1, z: 1.5 } },
+      { name: 'Docs', color: 0x22c55e, position: { x: 0, y: 1, z: -1.5 } }
     ];
 
-    detailPositions.forEach(pos => {
-      const detail = new THREE.Mesh(detailGeometry, detailMaterial);
-      detail.position.set(pos.x, pos.y, pos.z);
-      detail.castShadow = true;
-      details.push(detail);
+    features.forEach(feature => {
+      // Create feature cube
+      const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+      const material = new THREE.MeshPhysicalMaterial({
+        color: feature.color,
+        metalness: 0.5,
+        roughness: 0.3,
+        transmission: 0.2,
+        thickness: 0.5
+      });
+      const cube = new THREE.Mesh(geometry, material);
+      cube.position.set(feature.position.x, feature.position.y, feature.position.z);
+      cube.castShadow = true;
+      scene.add(cube);
+
+      // Add glowing edges
+      const edges = new THREE.EdgesGeometry(geometry);
+      const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: feature.color,
+        transparent: true,
+        opacity: 0.8
+      });
+      const line = new THREE.LineSegments(edges, lineMaterial);
+      line.position.copy(cube.position);
+      scene.add(line);
     });
 
-    // Add legs with improved materials
-    const legGeometry = new THREE.CylinderGeometry(0.2, 0.3, 1, 16);
-    const legMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xcccccc,
-      metalness: 0.8,
-      roughness: 0.2
-    });
-
-    const leg1 = new THREE.Mesh(legGeometry, legMaterial);
-    leg1.position.set(0.7, -1.5, 0);
-    leg1.castShadow = true;
-
-    const leg2 = leg1.clone();
-    leg2.position.set(-0.7, -1.5, 0);
-
-    // Group all parts
-    const r2d2 = new THREE.Group();
-    r2d2.add(body);
-    r2d2.add(head);
-    r2d2.add(eye);
-    details.forEach(detail => r2d2.add(detail));
-    r2d2.add(leg1);
-    r2d2.add(leg2);
-    scene.add(r2d2);
-
-    // Enhanced lighting setup
+    // Lighting
     const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
     scene.add(ambientLight);
-    
+
     const mainLight = new THREE.DirectionalLight(0xffffff, 1);
     mainLight.position.set(5, 5, 5);
     mainLight.castShadow = true;
@@ -128,34 +87,38 @@ const R2D2Scene = () => {
     mainLight.shadow.mapSize.height = 2048;
     scene.add(mainLight);
 
-    const backLight = new THREE.DirectionalLight(0x8080ff, 0.5);
-    backLight.position.set(-5, 5, -5);
-    scene.add(backLight);
-
     // Add point lights for dramatic effect
-    const pointLight1 = new THREE.PointLight(0x00ffff, 1, 10);
-    pointLight1.position.set(2, 2, 2);
-    scene.add(pointLight1);
-
-    const pointLight2 = new THREE.PointLight(0xff00ff, 1, 10);
-    pointLight2.position.set(-2, -2, -2);
-    scene.add(pointLight2);
+    const colors = [0x8b5cf6, 0x0ea5e9, 0xec4899, 0x22c55e];
+    colors.forEach((color, index) => {
+      const light = new THREE.PointLight(color, 1, 10);
+      const angle = (index / colors.length) * Math.PI * 2;
+      light.position.set(
+        Math.cos(angle) * 3,
+        2,
+        Math.sin(angle) * 3
+      );
+      scene.add(light);
+    });
 
     // Position camera
-    camera.position.z = 5;
-    camera.position.y = 1;
+    camera.position.set(4, 3, 4);
+    camera.lookAt(0, 0, 0);
 
-    // Animation loop with enhanced effects
+    // Animation loop
     const animate = () => {
       requestAnimationFrame(animate);
 
-      // Smooth rotation
-      r2d2.rotation.y += 0.005;
-      
-      // Animate lights
-      const time = Date.now() * 0.001;
-      pointLight1.intensity = 1 + Math.sin(time) * 0.5;
-      pointLight2.intensity = 1 + Math.cos(time) * 0.5;
+      // Rotate features
+      scene.children.forEach(child => {
+        if (child instanceof THREE.Mesh && child !== platform) {
+          child.rotation.y += 0.01;
+          child.position.y += Math.sin(Date.now() * 0.001) * 0.001;
+        }
+        if (child instanceof THREE.LineSegments) {
+          child.rotation.y += 0.01;
+          child.position.y += Math.sin(Date.now() * 0.001) * 0.001;
+        }
+      });
 
       // Update controls
       controls.update();
@@ -191,4 +154,4 @@ const R2D2Scene = () => {
   );
 };
 
-export default R2D2Scene;
+export default AppShowcaseScene;
