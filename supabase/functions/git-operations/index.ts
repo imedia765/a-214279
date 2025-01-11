@@ -2,8 +2,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Octokit } from 'https://esm.sh/octokit'
-import * as git from 'https://esm.sh/isomorphic-git'
-import http from 'https://esm.sh/isomorphic-git/http/web'
+import * as git from 'https://esm.sh/isomorphic-git@1.24.5'
+import http from 'https://esm.sh/isomorphic-git@1.24.5/http/web'
 import { join } from "https://deno.land/std@0.168.0/path/mod.ts";
 
 const corsHeaders = {
@@ -44,6 +44,7 @@ const fs = {
       try {
         return await Deno.readFile(filepath);
       } catch (error) {
+        log.error(`Error reading file ${filepath}:`, error);
         throw error;
       }
     },
@@ -51,6 +52,7 @@ const fs = {
       try {
         await Deno.writeFile(filepath, data);
       } catch (error) {
+        log.error(`Error writing file ${filepath}:`, error);
         throw error;
       }
     },
@@ -58,6 +60,7 @@ const fs = {
       try {
         await Deno.remove(filepath);
       } catch (error) {
+        log.error(`Error removing file ${filepath}:`, error);
         throw error;
       }
     },
@@ -69,6 +72,7 @@ const fs = {
         }
         return entries;
       } catch (error) {
+        log.error(`Error reading directory ${filepath}:`, error);
         throw error;
       }
     },
@@ -76,6 +80,7 @@ const fs = {
       try {
         await Deno.mkdir(filepath, options);
       } catch (error) {
+        log.error(`Error creating directory ${filepath}:`, error);
         throw error;
       }
     },
@@ -83,6 +88,7 @@ const fs = {
       try {
         await Deno.remove(filepath, options);
       } catch (error) {
+        log.error(`Error removing directory ${filepath}:`, error);
         throw error;
       }
     },
@@ -96,6 +102,7 @@ const fs = {
           isSymlink: () => stat.isSymlink,
         };
       } catch (error) {
+        log.error(`Error getting stat for ${filepath}:`, error);
         throw error;
       }
     },
@@ -109,6 +116,7 @@ const fs = {
           isSymlink: () => stat.isSymlink,
         };
       } catch (error) {
+        log.error(`Error getting lstat for ${filepath}:`, error);
         throw error;
       }
     },
@@ -117,6 +125,7 @@ const fs = {
     try {
       return Deno.readFileSync(filepath);
     } catch (error) {
+      log.error(`Error reading file sync ${filepath}:`, error);
       throw error;
     }
   },
@@ -124,6 +133,7 @@ const fs = {
     try {
       Deno.writeFileSync(filepath, data);
     } catch (error) {
+      log.error(`Error writing file sync ${filepath}:`, error);
       throw error;
     }
   },
@@ -139,6 +149,7 @@ const fs = {
     try {
       return Array.from(Deno.readDirSync(filepath)).map(entry => entry.name);
     } catch (error) {
+      log.error(`Error reading directory sync ${filepath}:`, error);
       throw error;
     }
   },
@@ -146,6 +157,7 @@ const fs = {
     try {
       Deno.mkdirSync(filepath, options);
     } catch (error) {
+      log.error(`Error creating directory sync ${filepath}:`, error);
       throw error;
     }
   },
@@ -153,6 +165,7 @@ const fs = {
     try {
       Deno.removeSync(filepath, options);
     } catch (error) {
+      log.error(`Error removing directory sync ${filepath}:`, error);
       throw error;
     }
   },
@@ -160,6 +173,7 @@ const fs = {
     try {
       Deno.removeSync(filepath);
     } catch (error) {
+      log.error(`Error removing file sync ${filepath}:`, error);
       throw error;
     }
   },
@@ -171,8 +185,12 @@ const fs = {
         isFile: () => stat.isFile,
         isDirectory: () => stat.isDirectory,
         isSymlink: () => stat.isSymlink,
+        mode: stat.mode || 0o666,
+        size: stat.size || 0,
+        mtimeMs: stat.mtime?.getTime() || 0,
       };
     } catch (error) {
+      log.error(`Error getting stat sync for ${filepath}:`, error);
       throw error;
     }
   },
@@ -184,8 +202,12 @@ const fs = {
         isFile: () => stat.isFile,
         isDirectory: () => stat.isDirectory,
         isSymlink: () => stat.isSymlink,
+        mode: stat.mode || 0o666,
+        size: stat.size || 0,
+        mtimeMs: stat.mtime?.getTime() || 0,
       };
     } catch (error) {
+      log.error(`Error getting lstat sync for ${filepath}:`, error);
       throw error;
     }
   },
