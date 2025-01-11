@@ -37,34 +37,34 @@ const log = {
   }
 };
 
-// Implement proper filesystem for isomorphic-git
+// Create a proper fs implementation for isomorphic-git
 const fs = {
   promises: {
-    readFile: async (path: string) => {
+    readFile: async (filepath: string) => {
       try {
-        return await Deno.readFile(path);
+        return await Deno.readFile(filepath);
       } catch (error) {
         throw error;
       }
     },
-    writeFile: async (path: string, data: Uint8Array) => {
+    writeFile: async (filepath: string, data: Uint8Array) => {
       try {
-        await Deno.writeFile(path, data);
+        await Deno.writeFile(filepath, data);
       } catch (error) {
         throw error;
       }
     },
-    unlink: async (path: string) => {
+    unlink: async (filepath: string) => {
       try {
-        await Deno.remove(path);
+        await Deno.remove(filepath);
       } catch (error) {
         throw error;
       }
     },
-    readdir: async (path: string) => {
+    readdir: async (filepath: string) => {
       try {
         const entries = [];
-        for await (const entry of Deno.readDir(path)) {
+        for await (const entry of Deno.readDir(filepath)) {
           entries.push(entry.name);
         }
         return entries;
@@ -72,23 +72,23 @@ const fs = {
         throw error;
       }
     },
-    mkdir: async (path: string, options = { recursive: true }) => {
+    mkdir: async (filepath: string, options = { recursive: true }) => {
       try {
-        await Deno.mkdir(path, options);
+        await Deno.mkdir(filepath, options);
       } catch (error) {
         throw error;
       }
     },
-    rmdir: async (path: string) => {
+    rmdir: async (filepath: string, options = { recursive: true }) => {
       try {
-        await Deno.remove(path, { recursive: true });
+        await Deno.remove(filepath, options);
       } catch (error) {
         throw error;
       }
     },
-    stat: async (path: string) => {
+    stat: async (filepath: string) => {
       try {
-        const stat = await Deno.stat(path);
+        const stat = await Deno.stat(filepath);
         return {
           ...stat,
           isFile: () => stat.isFile,
@@ -99,9 +99,9 @@ const fs = {
         throw error;
       }
     },
-    lstat: async (path: string) => {
+    lstat: async (filepath: string) => {
       try {
-        const stat = await Deno.lstat(path);
+        const stat = await Deno.lstat(filepath);
         return {
           ...stat,
           isFile: () => stat.isFile,
@@ -113,59 +113,59 @@ const fs = {
       }
     },
   },
-  readFileSync: (path: string) => {
+  readFileSync: (filepath: string) => {
     try {
-      return Deno.readFileSync(path);
+      return Deno.readFileSync(filepath);
     } catch (error) {
       throw error;
     }
   },
-  writeFileSync: (path: string, data: Uint8Array) => {
+  writeFileSync: (filepath: string, data: Uint8Array) => {
     try {
-      Deno.writeFileSync(path, data);
+      Deno.writeFileSync(filepath, data);
     } catch (error) {
       throw error;
     }
   },
-  existsSync: (path: string) => {
+  existsSync: (filepath: string) => {
     try {
-      Deno.statSync(path);
+      Deno.statSync(filepath);
       return true;
     } catch {
       return false;
     }
   },
-  readdirSync: (path: string) => {
+  readdirSync: (filepath: string) => {
     try {
-      return Array.from(Deno.readDirSync(path)).map(entry => entry.name);
+      return Array.from(Deno.readDirSync(filepath)).map(entry => entry.name);
     } catch (error) {
       throw error;
     }
   },
-  mkdirSync: (path: string, options = { recursive: true }) => {
+  mkdirSync: (filepath: string, options = { recursive: true }) => {
     try {
-      Deno.mkdirSync(path, options);
+      Deno.mkdirSync(filepath, options);
     } catch (error) {
       throw error;
     }
   },
-  rmdirSync: (path: string) => {
+  rmdirSync: (filepath: string, options = { recursive: true }) => {
     try {
-      Deno.removeSync(path, { recursive: true });
+      Deno.removeSync(filepath, options);
     } catch (error) {
       throw error;
     }
   },
-  unlinkSync: (path: string) => {
+  unlinkSync: (filepath: string) => {
     try {
-      Deno.removeSync(path);
+      Deno.removeSync(filepath);
     } catch (error) {
       throw error;
     }
   },
-  statSync: (path: string) => {
+  statSync: (filepath: string) => {
     try {
-      const stat = Deno.statSync(path);
+      const stat = Deno.statSync(filepath);
       return {
         ...stat,
         isFile: () => stat.isFile,
@@ -176,9 +176,9 @@ const fs = {
       throw error;
     }
   },
-  lstatSync: (path: string) => {
+  lstatSync: (filepath: string) => {
     try {
-      const stat = Deno.lstatSync(path);
+      const stat = Deno.lstatSync(filepath);
       return {
         ...stat,
         isFile: () => stat.isFile,
