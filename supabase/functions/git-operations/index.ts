@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Octokit } from 'https://esm.sh/octokit'
+import * as git from 'https://esm.sh/isomorphic-git'
+import http from 'https://esm.sh/isomorphic-git/http/web'
+import * as fs from 'https://deno.land/std@0.177.0/fs/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,17 +38,11 @@ const log = {
 
 const normalizeGitHubUrl = (url: string): string => {
   try {
-    // Remove any trailing slashes or .git extension
     let normalizedUrl = url.trim().replace(/\.git$/, '').replace(/\/$/, '');
-    
-    // Remove any port numbers or colons
     normalizedUrl = normalizedUrl.replace(/:\d+/, '');
-    
-    // Ensure the URL starts with https://
     if (!normalizedUrl.startsWith('http')) {
       normalizedUrl = `https://${normalizedUrl}`;
     }
-    
     return normalizedUrl;
   } catch (error) {
     console.error('Error normalizing GitHub URL:', error);
@@ -53,47 +50,60 @@ const normalizeGitHubUrl = (url: string): string => {
   }
 };
 
-async function getRepoDetails(url: string, octokit: Octokit) {
-  const logs = [];
+async function cloneRepository(url: string, dir: string, auth: { token: string }) {
   try {
-    const normalizedUrl = normalizeGitHubUrl(url);
-    logs.push(log.info('Starting repository details fetch', { originalUrl: url, normalizedUrl }));
+    await git.clone({
+      fs,
+      http,
+      dir,
+      url,
+      ref: 'main',
+      singleBranch: true,
+      depth: 1,
+      onAuth: () => ({ username: auth.token })
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Clone error:', error);
+    return { success: false, error };
+  }
+}
+
+async function pushToRepository(sourceDir: string, targetUrl: string, auth: { token: string }, options: { force?: boolean }) {
+  try {
+    const pushResult = await git.push({
+      fs,
+      http,
+      dir: sourceDir,
+      url: targetUrl,
+      force: options.force,
+      onAuth: () => ({ username: auth.token })
+    });
+    return { success: true, result: pushResult };
+  } catch (error) {
+    console.error('Push error:', error);
+    return { success: false, error };
+  }
+}
+
+async function verifyPushSuccess(sourceCommit: string, targetUrl: string, auth: { token: string }) {
+  try {
+    const { owner, repo } = parseGitHubUrl(targetUrl);
+    const octokit = new Octokit({ auth: auth.token });
     
-    const { owner, repo } = parseGitHubUrl(normalizedUrl);
-    logs.push(log.info('Parsed GitHub URL', { owner, repo }));
-
-    const [repoInfo, branches, lastCommits] = await Promise.all([
-      octokit.rest.repos.get({ owner, repo }),
-      octokit.rest.repos.listBranches({ owner, repo }),
-      octokit.rest.repos.listCommits({ owner, repo, per_page: 5 })
-    ]);
-
-    logs.push(log.success('Repository details fetched successfully', {
-      defaultBranch: repoInfo.data.default_branch,
-      branchCount: branches.data.length,
-      commitCount: lastCommits.data.length
-    }));
+    const { data: latestCommit } = await octokit.rest.repos.getCommit({
+      owner,
+      repo,
+      ref: 'HEAD'
+    });
 
     return {
-      logs,
-      details: {
-        defaultBranch: repoInfo.data.default_branch,
-        branches: branches.data.map(b => ({
-          name: b.name,
-          protected: b.protected,
-          sha: b.commit.sha
-        })),
-        lastCommits: lastCommits.data.map(c => ({
-          sha: c.sha,
-          message: c.commit.message,
-          date: c.commit.author?.date,
-          author: c.commit.author?.name
-        }))
-      }
+      success: latestCommit.sha === sourceCommit,
+      targetCommit: latestCommit.sha
     };
   } catch (error) {
-    logs.push(log.error('Error fetching repository details', error));
-    throw { error, logs };
+    console.error('Verification error:', error);
+    return { success: false, error };
   }
 }
 
@@ -116,53 +126,13 @@ const parseGitHubUrl = (url: string) => {
   }
 };
 
-async function createOrUpdateRef(octokit: Octokit, owner: string, repo: string, ref: string, sha: string, force: boolean) {
-  try {
-    // First try to get the reference
-    try {
-      await octokit.rest.git.getRef({
-        owner,
-        repo,
-        ref: ref.replace('refs/', '')
-      });
-      
-      // If reference exists, update it
-      return await octokit.rest.git.updateRef({
-        owner,
-        repo,
-        ref: ref.replace('refs/', ''),
-        sha,
-        force
-      });
-    } catch (error) {
-      if (error.status === 404) {
-        // If reference doesn't exist, create it
-        return await octokit.rest.git.createRef({
-          owner,
-          repo,
-          ref,
-          sha
-        });
-      }
-      throw error;
-    }
-  } catch (error) {
-    throw error;
-  }
-}
-
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { 
-      headers: {
-        ...corsHeaders,
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      }
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   const logs = [];
+  const workDir = await Deno.makeTempDir();
   
   try {
     const { type, sourceRepoId, targetRepoId, pushType } = await req.json();
@@ -179,14 +149,9 @@ serve(async (req) => {
       throw new Error('GitHub token not configured');
     }
 
-    const octokit = new Octokit({
-      auth: githubToken
-    });
-
     if (type === 'push') {
       logs.push(log.info('Starting Git push operation', { sourceRepoId, targetRepoId, pushType }));
       
-      // Fetch source and target repo details
       const { data: sourceRepo } = await supabaseClient
         .from('repositories')
         .select('*')
@@ -204,114 +169,46 @@ serve(async (req) => {
         throw new Error('Repository not found');
       }
 
-      // Normalize URLs before processing
       const normalizedSourceUrl = normalizeGitHubUrl(sourceRepo.url);
       const normalizedTargetUrl = normalizeGitHubUrl(targetRepo.url);
+      const sourceDir = `${workDir}/source`;
 
-      logs.push(log.info('Repositories found', {
-        source: { url: normalizedSourceUrl, branch: sourceRepo.default_branch },
-        target: { url: normalizedTargetUrl, branch: targetRepo.default_branch }
-      }));
-
-      // Get latest commit from source
-      const sourceDetails = await getRepoDetails(normalizedSourceUrl, octokit);
-      logs.push(...sourceDetails.logs);
-
-      const sourceCommit = sourceDetails.details.lastCommits[0];
-      if (!sourceCommit) {
-        logs.push(log.error('No commits found in source repository'));
-        throw new Error('No commits found in source repository');
-      }
-
-      logs.push(log.info('Source commit details', {
-        sha: sourceCommit.sha,
-        message: sourceCommit.message,
-        date: sourceCommit.date
-      }));
-
-      // Update target repository
-      const { owner: targetOwner, repo: targetRepoName } = parseGitHubUrl(normalizedTargetUrl);
-      const branchRef = `refs/heads/${targetRepo.default_branch || 'main'}`;
+      logs.push(log.info('Cloning source repository', { url: normalizedSourceUrl }));
+      const cloneResult = await cloneRepository(normalizedSourceUrl, sourceDir, { token: githubToken });
       
-      try {
-        const updateRef = await createOrUpdateRef(
-          octokit,
-          targetOwner,
-          targetRepoName,
-          branchRef,
-          sourceCommit.sha,
-          pushType === 'force' || pushType === 'force-with-lease'
-        );
-
-        logs.push(log.success('Push operation completed', {
-          targetRepo: normalizedTargetUrl,
-          ref: updateRef.data.ref,
-          sha: updateRef.data.object.sha
-        }));
-
-        // Update repository status in database
-        await supabaseClient
-          .from('repositories')
-          .update({
-            last_commit: sourceCommit.sha,
-            last_commit_date: sourceCommit.date,
-            last_sync: new Date().toISOString(),
-            status: 'synced'
-          })
-          .eq('id', targetRepoId);
-
-        logs.push(log.success('Repository status updated in database'));
-
-      } catch (error) {
-        logs.push(log.error('Push operation failed', error));
-        throw error;
-      }
-    }
-
-    if (type === 'getLastCommit') {
-      logs.push(log.info('Getting repository details', { sourceRepoId }));
-      
-      const { data: repoData, error: repoError } = await supabaseClient
-        .from('repositories')
-        .select('url')
-        .eq('id', sourceRepoId)
-        .single();
-
-      if (repoError) {
-        logs.push(log.error('Error fetching repository', repoError));
-        throw repoError;
+      if (!cloneResult.success) {
+        logs.push(log.error('Failed to clone source repository', cloneResult.error));
+        throw new Error('Failed to clone source repository');
       }
 
-      if (!repoData?.url) {
-        logs.push(log.error('Repository URL not found'));
-        throw new Error('Repository URL not found');
+      logs.push(log.info('Pushing to target repository', { url: normalizedTargetUrl }));
+      const pushResult = await pushToRepository(sourceDir, normalizedTargetUrl, { token: githubToken }, {
+        force: pushType === 'force' || pushType === 'force-with-lease'
+      });
+
+      if (!pushResult.success) {
+        logs.push(log.error('Failed to push to target repository', pushResult.error));
+        throw new Error('Failed to push to target repository');
       }
 
-      const normalizedUrl = normalizeGitHubUrl(repoData.url);
-      const repoDetails = await getRepoDetails(normalizedUrl, octokit);
-      logs.push(...repoDetails.logs);
+      logs.push(log.info('Verifying push success'));
+      const verificationResult = await verifyPushSuccess(sourceRepo.last_commit, normalizedTargetUrl, { token: githubToken });
 
-      const lastCommit = repoDetails.details.lastCommits[0];
-      
-      const { error: updateError } = await supabaseClient
+      if (!verificationResult.success) {
+        logs.push(log.error('Push verification failed', verificationResult.error));
+        throw new Error('Push verification failed');
+      }
+
+      await supabaseClient
         .from('repositories')
         .update({
-          last_commit: lastCommit.sha,
-          last_commit_date: lastCommit.date,
+          last_commit: verificationResult.targetCommit,
           last_sync: new Date().toISOString(),
-          status: 'synced',
-          default_branch: repoDetails.details.defaultBranch,
-          branches: repoDetails.details.branches,
-          recent_commits: repoDetails.details.lastCommits
+          status: 'synced'
         })
-        .eq('id', sourceRepoId);
+        .eq('id', targetRepoId);
 
-      if (updateError) {
-        logs.push(log.error('Error updating repository', updateError));
-        throw updateError;
-      }
-
-      logs.push(log.success('Repository updated successfully'));
+      logs.push(log.success('Push operation completed successfully'));
     }
 
     return new Response(
@@ -320,12 +217,7 @@ serve(async (req) => {
         logs,
         timestamp: new Date().toISOString()
       }),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
@@ -343,12 +235,15 @@ serve(async (req) => {
         }
       }),
       { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500
       }
     );
+  } finally {
+    try {
+      await Deno.remove(workDir, { recursive: true });
+    } catch (error) {
+      console.error('Failed to clean up temporary directory:', error);
+    }
   }
 });
