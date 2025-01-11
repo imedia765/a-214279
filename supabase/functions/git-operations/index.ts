@@ -52,36 +52,48 @@ const normalizeGitHubUrl = (url: string): string => {
 
 async function cloneRepository(url: string, dir: string, auth: { token: string }) {
   try {
+    log.info(`Starting clone operation for ${url} into ${dir}`);
+    
     await git.clone({
       fs,
       http,
       dir,
       url,
-      ref: 'main',
-      singleBranch: true,
       depth: 1,
-      onAuth: () => ({ username: auth.token })
+      onAuth: () => ({ username: auth.token }),
+      onProgress: (progress) => {
+        log.info('Clone progress', progress);
+      }
     });
+    
+    log.success('Clone operation completed successfully');
     return { success: true };
   } catch (error) {
-    console.error('Clone error:', error);
+    log.error('Clone operation failed', error);
     return { success: false, error };
   }
 }
 
 async function pushToRepository(sourceDir: string, targetUrl: string, auth: { token: string }, options: { force?: boolean }) {
   try {
+    log.info(`Starting push operation to ${targetUrl}`);
+    
     const pushResult = await git.push({
       fs,
       http,
       dir: sourceDir,
       url: targetUrl,
       force: options.force,
-      onAuth: () => ({ username: auth.token })
+      onAuth: () => ({ username: auth.token }),
+      onProgress: (progress) => {
+        log.info('Push progress', progress);
+      }
     });
+    
+    log.success('Push operation completed successfully');
     return { success: true, result: pushResult };
   } catch (error) {
-    console.error('Push error:', error);
+    log.error('Push operation failed', error);
     return { success: false, error };
   }
 }
@@ -91,18 +103,23 @@ async function verifyPushSuccess(sourceCommit: string, targetUrl: string, auth: 
     const { owner, repo } = parseGitHubUrl(targetUrl);
     const octokit = new Octokit({ auth: auth.token });
     
+    log.info(`Verifying push success for ${owner}/${repo}`);
+    
     const { data: latestCommit } = await octokit.rest.repos.getCommit({
       owner,
       repo,
       ref: 'HEAD'
     });
 
+    const success = latestCommit.sha === sourceCommit;
+    log.info('Push verification result', { success, sourceCommit, targetCommit: latestCommit.sha });
+    
     return {
-      success: latestCommit.sha === sourceCommit,
+      success,
       targetCommit: latestCommit.sha
     };
   } catch (error) {
-    console.error('Verification error:', error);
+    log.error('Verification failed', error);
     return { success: false, error };
   }
 }
