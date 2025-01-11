@@ -45,7 +45,7 @@ const normalizeGitHubUrl = (url: string): string => {
     }
     return normalizedUrl;
   } catch (error) {
-    console.error('Error normalizing GitHub URL:', error);
+    log.error('Error normalizing GitHub URL:', error);
     throw error;
   }
 };
@@ -54,17 +54,28 @@ async function cloneRepository(url: string, dir: string, auth: { token: string }
   try {
     log.info(`Starting clone operation for ${url} into ${dir}`);
     
-    await git.clone({
+    // First, try to create the directory if it doesn't exist
+    try {
+      await fs.ensureDir(dir);
+    } catch (error) {
+      log.error('Failed to create directory', error);
+      throw error;
+    }
+
+    // Configure git clone options with authentication
+    const cloneOptions = {
       fs,
       http,
       dir,
       url,
       depth: 1,
       onAuth: () => ({ username: auth.token }),
-      onProgress: (progress) => {
+      onProgress: (progress: any) => {
         log.info('Clone progress', progress);
       }
-    });
+    };
+
+    await git.clone(cloneOptions);
     
     log.success('Clone operation completed successfully');
     return { success: true };
@@ -78,19 +89,23 @@ async function pushToRepository(sourceDir: string, targetUrl: string, auth: { to
   try {
     log.info(`Starting push operation to ${targetUrl}`);
     
-    const pushResult = await git.push({
+    // Configure git push options with authentication
+    const pushOptions = {
       fs,
       http,
       dir: sourceDir,
       url: targetUrl,
       force: options.force,
       onAuth: () => ({ username: auth.token }),
-      onProgress: (progress) => {
+      onProgress: (progress: any) => {
         log.info('Push progress', progress);
-      }
-    });
+      },
+      remote: 'origin'
+    };
+
+    const pushResult = await git.push(pushOptions);
     
-    log.success('Push operation completed successfully');
+    log.success('Push operation completed successfully', pushResult);
     return { success: true, result: pushResult };
   } catch (error) {
     log.error('Push operation failed', error);
@@ -105,6 +120,7 @@ async function verifyPushSuccess(sourceCommit: string, targetUrl: string, auth: 
     
     log.info(`Verifying push success for ${owner}/${repo}`);
     
+    // Get the latest commit from the target repository
     const { data: latestCommit } = await octokit.rest.repos.getCommit({
       owner,
       repo,
@@ -112,11 +128,17 @@ async function verifyPushSuccess(sourceCommit: string, targetUrl: string, auth: 
     });
 
     const success = latestCommit.sha === sourceCommit;
-    log.info('Push verification result', { success, sourceCommit, targetCommit: latestCommit.sha });
+    log.info('Push verification result', { 
+      success, 
+      sourceCommit, 
+      targetCommit: latestCommit.sha,
+      commitDate: latestCommit.commit.author?.date
+    });
     
     return {
       success,
-      targetCommit: latestCommit.sha
+      targetCommit: latestCommit.sha,
+      commitDate: latestCommit.commit.author?.date
     };
   } catch (error) {
     log.error('Verification failed', error);
@@ -169,6 +191,7 @@ serve(async (req) => {
     if (type === 'push') {
       logs.push(log.info('Starting Git push operation', { sourceRepoId, targetRepoId, pushType }));
       
+      // Fetch source and target repository details
       const { data: sourceRepo } = await supabaseClient
         .from('repositories')
         .select('*')
@@ -190,6 +213,7 @@ serve(async (req) => {
       const normalizedTargetUrl = normalizeGitHubUrl(targetRepo.url);
       const sourceDir = `${workDir}/source`;
 
+      // Clone source repository
       logs.push(log.info('Cloning source repository', { url: normalizedSourceUrl }));
       const cloneResult = await cloneRepository(normalizedSourceUrl, sourceDir, { token: githubToken });
       
@@ -198,6 +222,7 @@ serve(async (req) => {
         throw new Error('Failed to clone source repository');
       }
 
+      // Push to target repository
       logs.push(log.info('Pushing to target repository', { url: normalizedTargetUrl }));
       const pushResult = await pushToRepository(sourceDir, normalizedTargetUrl, { token: githubToken }, {
         force: pushType === 'force' || pushType === 'force-with-lease'
@@ -208,6 +233,7 @@ serve(async (req) => {
         throw new Error('Failed to push to target repository');
       }
 
+      // Verify push success
       logs.push(log.info('Verifying push success'));
       const verificationResult = await verifyPushSuccess(sourceRepo.last_commit, normalizedTargetUrl, { token: githubToken });
 
@@ -216,10 +242,12 @@ serve(async (req) => {
         throw new Error('Push verification failed');
       }
 
+      // Update target repository status in database
       await supabaseClient
         .from('repositories')
         .update({
           last_commit: verificationResult.targetCommit,
+          last_commit_date: verificationResult.commitDate,
           last_sync: new Date().toISOString(),
           status: 'synced'
         })
