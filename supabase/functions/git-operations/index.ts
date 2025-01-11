@@ -1,9 +1,9 @@
+// @ts-ignore: Deno deploy
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Octokit } from 'https://esm.sh/octokit'
 import * as git from 'https://esm.sh/isomorphic-git'
 import http from 'https://esm.sh/isomorphic-git/http/web'
-import * as fs from 'https://deno.land/std@0.177.0/fs/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,28 +43,39 @@ const normalizeGitHubUrl = (url: string): string => {
     if (!normalizedUrl.startsWith('http')) {
       normalizedUrl = `https://${normalizedUrl}`;
     }
-    return normalizedUrl + '.git'; // Add .git extension for clone operations
+    return normalizedUrl + '.git';
   } catch (error) {
     log.error('Error normalizing GitHub URL:', error);
     throw error;
   }
 };
 
+async function createTempDir(): Promise<string> {
+  const tempDir = await Deno.makeTempDir();
+  return tempDir;
+}
+
 async function cloneRepository(url: string, dir: string, auth: { token: string }) {
   try {
     log.info(`Starting clone operation for ${url} into ${dir}`);
     
-    // First, try to create the directory if it doesn't exist
-    try {
-      await fs.ensureDir(dir);
-    } catch (error) {
-      log.error('Failed to create directory', error);
-      throw error;
-    }
-
+    // Create directory if it doesn't exist
+    await Deno.mkdir(dir, { recursive: true });
+    
     // Configure git clone options with authentication
     const cloneOptions = {
-      fs,
+      fs: {
+        promises: {
+          readFile: Deno.readFile,
+          writeFile: Deno.writeFile,
+          unlink: Deno.remove,
+          readdir: Deno.readDir,
+          mkdir: Deno.mkdir,
+          rmdir: Deno.remove,
+          stat: Deno.stat,
+          lstat: Deno.lstat,
+        },
+      },
       http,
       dir,
       url,
@@ -174,9 +185,10 @@ serve(async (req) => {
   }
 
   const logs = [];
-  const workDir = await Deno.makeTempDir();
+  let workDir: string | null = null;
   
   try {
+    workDir = await createTempDir();
     const { type, sourceRepoId, targetRepoId, pushType } = await req.json();
     logs.push(log.info('Received operation request', { type, sourceRepoId, targetRepoId, pushType }));
 
@@ -281,10 +293,12 @@ serve(async (req) => {
       }
     );
   } finally {
-    try {
-      await Deno.remove(workDir, { recursive: true });
-    } catch (error) {
-      console.error('Failed to clean up temporary directory:', error);
+    if (workDir) {
+      try {
+        await Deno.remove(workDir, { recursive: true });
+      } catch (error) {
+        console.error('Failed to clean up temporary directory:', error);
+      }
     }
   }
 });
