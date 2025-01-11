@@ -37,6 +37,160 @@ const log = {
   }
 };
 
+// Implement proper filesystem for isomorphic-git
+const fs = {
+  promises: {
+    readFile: async (path: string) => {
+      try {
+        return await Deno.readFile(path);
+      } catch (error) {
+        throw error;
+      }
+    },
+    writeFile: async (path: string, data: Uint8Array) => {
+      try {
+        await Deno.writeFile(path, data);
+      } catch (error) {
+        throw error;
+      }
+    },
+    unlink: async (path: string) => {
+      try {
+        await Deno.remove(path);
+      } catch (error) {
+        throw error;
+      }
+    },
+    readdir: async (path: string) => {
+      try {
+        const entries = [];
+        for await (const entry of Deno.readDir(path)) {
+          entries.push(entry.name);
+        }
+        return entries;
+      } catch (error) {
+        throw error;
+      }
+    },
+    mkdir: async (path: string, options = { recursive: true }) => {
+      try {
+        await Deno.mkdir(path, options);
+      } catch (error) {
+        throw error;
+      }
+    },
+    rmdir: async (path: string) => {
+      try {
+        await Deno.remove(path, { recursive: true });
+      } catch (error) {
+        throw error;
+      }
+    },
+    stat: async (path: string) => {
+      try {
+        const stat = await Deno.stat(path);
+        return {
+          ...stat,
+          isFile: () => stat.isFile,
+          isDirectory: () => stat.isDirectory,
+          isSymlink: () => stat.isSymlink,
+        };
+      } catch (error) {
+        throw error;
+      }
+    },
+    lstat: async (path: string) => {
+      try {
+        const stat = await Deno.lstat(path);
+        return {
+          ...stat,
+          isFile: () => stat.isFile,
+          isDirectory: () => stat.isDirectory,
+          isSymlink: () => stat.isSymlink,
+        };
+      } catch (error) {
+        throw error;
+      }
+    },
+  },
+  readFileSync: (path: string) => {
+    try {
+      return Deno.readFileSync(path);
+    } catch (error) {
+      throw error;
+    }
+  },
+  writeFileSync: (path: string, data: Uint8Array) => {
+    try {
+      Deno.writeFileSync(path, data);
+    } catch (error) {
+      throw error;
+    }
+  },
+  existsSync: (path: string) => {
+    try {
+      Deno.statSync(path);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  readdirSync: (path: string) => {
+    try {
+      return Array.from(Deno.readDirSync(path)).map(entry => entry.name);
+    } catch (error) {
+      throw error;
+    }
+  },
+  mkdirSync: (path: string, options = { recursive: true }) => {
+    try {
+      Deno.mkdirSync(path, options);
+    } catch (error) {
+      throw error;
+    }
+  },
+  rmdirSync: (path: string) => {
+    try {
+      Deno.removeSync(path, { recursive: true });
+    } catch (error) {
+      throw error;
+    }
+  },
+  unlinkSync: (path: string) => {
+    try {
+      Deno.removeSync(path);
+    } catch (error) {
+      throw error;
+    }
+  },
+  statSync: (path: string) => {
+    try {
+      const stat = Deno.statSync(path);
+      return {
+        ...stat,
+        isFile: () => stat.isFile,
+        isDirectory: () => stat.isDirectory,
+        isSymlink: () => stat.isSymlink,
+      };
+    } catch (error) {
+      throw error;
+    }
+  },
+  lstatSync: (path: string) => {
+    try {
+      const stat = Deno.lstatSync(path);
+      return {
+        ...stat,
+        isFile: () => stat.isFile,
+        isDirectory: () => stat.isDirectory,
+        isSymlink: () => stat.isSymlink,
+      };
+    } catch (error) {
+      throw error;
+    }
+  },
+};
+
 const normalizeGitHubUrl = (url: string): string => {
   try {
     let normalizedUrl = url.trim().replace(/\.git$/, '').replace(/\/$/, '');
@@ -49,94 +203,6 @@ const normalizeGitHubUrl = (url: string): string => {
     log.error('Error normalizing GitHub URL:', error);
     throw error;
   }
-};
-
-// Implement proper filesystem for isomorphic-git
-const fs = {
-  promises: {
-    readFile: async (path: string) => {
-      try {
-        return await Deno.readFile(path);
-      } catch (error) {
-        log.error(`Error reading file at ${path}:`, error);
-        throw error;
-      }
-    },
-    writeFile: async (path: string, data: Uint8Array) => {
-      try {
-        await Deno.writeFile(path, data);
-      } catch (error) {
-        log.error(`Error writing file at ${path}:`, error);
-        throw error;
-      }
-    },
-    unlink: async (path: string) => {
-      try {
-        await Deno.remove(path);
-      } catch (error) {
-        log.error(`Error removing file at ${path}:`, error);
-        throw error;
-      }
-    },
-    readdir: async (path: string) => {
-      try {
-        const entries = [];
-        for await (const entry of Deno.readDir(path)) {
-          entries.push(entry.name);
-        }
-        return entries;
-      } catch (error) {
-        log.error(`Error reading directory at ${path}:`, error);
-        throw error;
-      }
-    },
-    mkdir: async (path: string, options = { recursive: true }) => {
-      try {
-        await Deno.mkdir(path, options);
-      } catch (error) {
-        log.error(`Error creating directory at ${path}:`, error);
-        throw error;
-      }
-    },
-    rmdir: async (path: string) => {
-      try {
-        await Deno.remove(path, { recursive: true });
-      } catch (error) {
-        log.error(`Error removing directory at ${path}:`, error);
-        throw error;
-      }
-    },
-    stat: async (path: string) => {
-      try {
-        return await Deno.stat(path);
-      } catch (error) {
-        log.error(`Error getting stats for ${path}:`, error);
-        throw error;
-      }
-    },
-    lstat: async (path: string) => {
-      try {
-        return await Deno.lstat(path);
-      } catch (error) {
-        log.error(`Error getting lstat for ${path}:`, error);
-        throw error;
-      }
-    },
-  },
-  readFileSync: (path: string) => {
-    return Deno.readFileSync(path);
-  },
-  writeFileSync: (path: string, data: Uint8Array) => {
-    Deno.writeFileSync(path, data);
-  },
-  existsSync: (path: string) => {
-    try {
-      Deno.statSync(path);
-      return true;
-    } catch {
-      return false;
-    }
-  },
 };
 
 async function createTempDir(): Promise<string> {
