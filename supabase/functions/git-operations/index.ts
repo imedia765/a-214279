@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Octokit } from 'https://esm.sh/octokit'
 import * as git from 'https://esm.sh/isomorphic-git'
 import http from 'https://esm.sh/isomorphic-git/http/web'
+import { join } from "https://deno.land/std@0.168.0/path/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -51,8 +52,14 @@ const normalizeGitHubUrl = (url: string): string => {
 };
 
 async function createTempDir(): Promise<string> {
-  const tempDir = await Deno.makeTempDir();
-  return tempDir;
+  try {
+    const tempDir = await Deno.makeTempDir();
+    log.info(`Created temporary directory: ${tempDir}`);
+    return tempDir;
+  } catch (error) {
+    log.error('Failed to create temporary directory:', error);
+    throw error;
+  }
 }
 
 async function cloneRepository(url: string, dir: string, auth: { token: string }) {
@@ -66,14 +73,20 @@ async function cloneRepository(url: string, dir: string, auth: { token: string }
     const cloneOptions = {
       fs: {
         promises: {
-          readFile: Deno.readFile,
-          writeFile: Deno.writeFile,
-          unlink: Deno.remove,
-          readdir: Deno.readDir,
-          mkdir: Deno.mkdir,
-          rmdir: Deno.remove,
-          stat: Deno.stat,
-          lstat: Deno.lstat,
+          readFile: async (path: string) => await Deno.readFile(path),
+          writeFile: async (path: string, data: Uint8Array) => await Deno.writeFile(path, data),
+          unlink: async (path: string) => await Deno.remove(path),
+          readdir: async (path: string) => {
+            const entries = [];
+            for await (const entry of Deno.readDir(path)) {
+              entries.push(entry.name);
+            }
+            return entries;
+          },
+          mkdir: async (path: string) => await Deno.mkdir(path, { recursive: true }),
+          rmdir: async (path: string) => await Deno.remove(path, { recursive: true }),
+          stat: async (path: string) => await Deno.stat(path),
+          lstat: async (path: string) => await Deno.lstat(path),
         },
       },
       http,
@@ -226,7 +239,7 @@ serve(async (req) => {
 
       const normalizedSourceUrl = normalizeGitHubUrl(sourceRepo.url);
       const normalizedTargetUrl = normalizeGitHubUrl(targetRepo.url);
-      const sourceDir = `${workDir}/source`;
+      const sourceDir = join(workDir, 'source');
 
       // Clone source repository with proper authentication
       logs.push(log.info('Cloning source repository', { url: normalizedSourceUrl }));
