@@ -4,29 +4,42 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { WebMetricsForm } from "@/components/web-tools/WebMetricsForm";
 import { MetricsDisplay } from "@/components/web-tools/MetricsDisplay";
 import { ConsoleOutput } from "@/components/web-tools/ConsoleOutput";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const WebTools = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [metrics, setMetrics] = useState<Array<{ metric: string; value: string }>>([]);
   const [logs, setLogs] = useState<string[]>([]);
+  const { toast } = useToast();
 
   const handleAnalyze = async (url: string) => {
     setIsLoading(true);
+    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Analyzing ${url}...`]);
+
     try {
-      // Mock data for demonstration - replace with actual API call
-      const mockMetrics = [
-        { metric: "Page Load Time", value: "2.3s" },
-        { metric: "Page Size", value: "1.2MB" },
-        { metric: "Meta Description", value: "Present" },
-        { metric: "H1 Tag", value: "Present" },
-        { metric: "HTTPS", value: "Yes" },
-        { metric: "Image Alt Tags", value: "Present" }
-      ];
-      
-      setMetrics(mockMetrics);
-      setLogs([`[${new Date().toLocaleTimeString()}] Analyzing ${url}...`]);
+      const { data, error } = await supabase.functions.invoke('web-analyzer', {
+        body: { url }
+      });
+
+      if (error) throw error;
+
+      if (data.metrics) {
+        setMetrics(data.metrics);
+        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Analysis completed successfully`]);
+        toast({
+          title: "Analysis Complete",
+          description: "Website metrics have been analyzed successfully",
+        });
+      }
     } catch (error) {
-      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${error}`]);
+      console.error('Analysis error:', error);
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${error.message}`]);
+      toast({
+        title: "Analysis Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -44,7 +57,7 @@ const WebTools = () => {
             </div>
             <div className="grid gap-6">
               <WebMetricsForm onAnalyze={handleAnalyze} isLoading={isLoading} />
-              <MetricsDisplay metrics={metrics} />
+              {metrics.length > 0 && <MetricsDisplay metrics={metrics} />}
               <ConsoleOutput logs={logs} />
             </div>
           </div>
