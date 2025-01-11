@@ -51,6 +51,94 @@ const normalizeGitHubUrl = (url: string): string => {
   }
 };
 
+// Implement proper filesystem for isomorphic-git
+const fs = {
+  promises: {
+    readFile: async (path: string) => {
+      try {
+        return await Deno.readFile(path);
+      } catch (error) {
+        log.error(`Error reading file at ${path}:`, error);
+        throw error;
+      }
+    },
+    writeFile: async (path: string, data: Uint8Array) => {
+      try {
+        await Deno.writeFile(path, data);
+      } catch (error) {
+        log.error(`Error writing file at ${path}:`, error);
+        throw error;
+      }
+    },
+    unlink: async (path: string) => {
+      try {
+        await Deno.remove(path);
+      } catch (error) {
+        log.error(`Error removing file at ${path}:`, error);
+        throw error;
+      }
+    },
+    readdir: async (path: string) => {
+      try {
+        const entries = [];
+        for await (const entry of Deno.readDir(path)) {
+          entries.push(entry.name);
+        }
+        return entries;
+      } catch (error) {
+        log.error(`Error reading directory at ${path}:`, error);
+        throw error;
+      }
+    },
+    mkdir: async (path: string, options = { recursive: true }) => {
+      try {
+        await Deno.mkdir(path, options);
+      } catch (error) {
+        log.error(`Error creating directory at ${path}:`, error);
+        throw error;
+      }
+    },
+    rmdir: async (path: string) => {
+      try {
+        await Deno.remove(path, { recursive: true });
+      } catch (error) {
+        log.error(`Error removing directory at ${path}:`, error);
+        throw error;
+      }
+    },
+    stat: async (path: string) => {
+      try {
+        return await Deno.stat(path);
+      } catch (error) {
+        log.error(`Error getting stats for ${path}:`, error);
+        throw error;
+      }
+    },
+    lstat: async (path: string) => {
+      try {
+        return await Deno.lstat(path);
+      } catch (error) {
+        log.error(`Error getting lstat for ${path}:`, error);
+        throw error;
+      }
+    },
+  },
+  readFileSync: (path: string) => {
+    return Deno.readFileSync(path);
+  },
+  writeFileSync: (path: string, data: Uint8Array) => {
+    Deno.writeFileSync(path, data);
+  },
+  existsSync: (path: string) => {
+    try {
+      Deno.statSync(path);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
+
 async function createTempDir(): Promise<string> {
   try {
     const tempDir = await Deno.makeTempDir();
@@ -66,29 +154,10 @@ async function cloneRepository(url: string, dir: string, auth: { token: string }
   try {
     log.info(`Starting clone operation for ${url} into ${dir}`);
     
-    // Create directory if it doesn't exist
-    await Deno.mkdir(dir, { recursive: true });
+    await fs.promises.mkdir(dir, { recursive: true });
     
-    // Configure git clone options with authentication
     const cloneOptions = {
-      fs: {
-        promises: {
-          readFile: async (path: string) => await Deno.readFile(path),
-          writeFile: async (path: string, data: Uint8Array) => await Deno.writeFile(path, data),
-          unlink: async (path: string) => await Deno.remove(path),
-          readdir: async (path: string) => {
-            const entries = [];
-            for await (const entry of Deno.readDir(path)) {
-              entries.push(entry.name);
-            }
-            return entries;
-          },
-          mkdir: async (path: string) => await Deno.mkdir(path, { recursive: true }),
-          rmdir: async (path: string) => await Deno.remove(path, { recursive: true }),
-          stat: async (path: string) => await Deno.stat(path),
-          lstat: async (path: string) => await Deno.lstat(path),
-        },
-      },
+      fs,
       http,
       dir,
       url,
@@ -116,7 +185,6 @@ async function pushToRepository(sourceDir: string, targetUrl: string, auth: { to
   try {
     log.info(`Starting push operation to ${targetUrl}`);
     
-    // Configure git push options with authentication
     const pushOptions = {
       fs,
       http,
@@ -219,7 +287,6 @@ serve(async (req) => {
     if (type === 'push') {
       logs.push(log.info('Starting Git push operation', { sourceRepoId, targetRepoId, pushType }));
       
-      // Fetch source and target repository details
       const { data: sourceRepo } = await supabaseClient
         .from('repositories')
         .select('*')
@@ -241,11 +308,9 @@ serve(async (req) => {
       const normalizedTargetUrl = normalizeGitHubUrl(targetRepo.url);
       const sourceDir = join(workDir, 'source');
 
-      // Clone source repository with proper authentication
       logs.push(log.info('Cloning source repository', { url: normalizedSourceUrl }));
       await cloneRepository(normalizedSourceUrl, sourceDir, { token: githubToken });
 
-      // Push to target repository
       logs.push(log.info('Pushing to target repository', { url: normalizedTargetUrl }));
       const pushResult = await pushToRepository(sourceDir, normalizedTargetUrl, { token: githubToken }, {
         force: pushType === 'force' || pushType === 'force-with-lease'
@@ -255,7 +320,6 @@ serve(async (req) => {
         throw new Error('Failed to push to target repository');
       }
 
-      // Verify push success
       logs.push(log.info('Verifying push success'));
       const verificationResult = await verifyPushSuccess(sourceRepo.last_commit, normalizedTargetUrl, { token: githubToken });
 
@@ -263,7 +327,6 @@ serve(async (req) => {
         throw new Error('Push verification failed');
       }
 
-      // Update target repository status in database
       await supabaseClient
         .from('repositories')
         .update({
