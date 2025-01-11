@@ -43,7 +43,7 @@ const normalizeGitHubUrl = (url: string): string => {
     if (!normalizedUrl.startsWith('http')) {
       normalizedUrl = `https://${normalizedUrl}`;
     }
-    return normalizedUrl;
+    return normalizedUrl + '.git'; // Add .git extension for clone operations
   } catch (error) {
     log.error('Error normalizing GitHub URL:', error);
     throw error;
@@ -72,6 +72,9 @@ async function cloneRepository(url: string, dir: string, auth: { token: string }
       onAuth: () => ({ username: auth.token }),
       onProgress: (progress: any) => {
         log.info('Clone progress', progress);
+      },
+      headers: {
+        'Authorization': `token ${auth.token}`
       }
     };
 
@@ -81,7 +84,7 @@ async function cloneRepository(url: string, dir: string, auth: { token: string }
     return { success: true };
   } catch (error) {
     log.error('Clone operation failed', error);
-    return { success: false, error };
+    throw error;
   }
 }
 
@@ -213,14 +216,9 @@ serve(async (req) => {
       const normalizedTargetUrl = normalizeGitHubUrl(targetRepo.url);
       const sourceDir = `${workDir}/source`;
 
-      // Clone source repository
+      // Clone source repository with proper authentication
       logs.push(log.info('Cloning source repository', { url: normalizedSourceUrl }));
-      const cloneResult = await cloneRepository(normalizedSourceUrl, sourceDir, { token: githubToken });
-      
-      if (!cloneResult.success) {
-        logs.push(log.error('Failed to clone source repository', cloneResult.error));
-        throw new Error('Failed to clone source repository');
-      }
+      await cloneRepository(normalizedSourceUrl, sourceDir, { token: githubToken });
 
       // Push to target repository
       logs.push(log.info('Pushing to target repository', { url: normalizedTargetUrl }));
@@ -229,7 +227,6 @@ serve(async (req) => {
       });
 
       if (!pushResult.success) {
-        logs.push(log.error('Failed to push to target repository', pushResult.error));
         throw new Error('Failed to push to target repository');
       }
 
@@ -238,7 +235,6 @@ serve(async (req) => {
       const verificationResult = await verifyPushSuccess(sourceRepo.last_commit, normalizedTargetUrl, { token: githubToken });
 
       if (!verificationResult.success) {
-        logs.push(log.error('Push verification failed', verificationResult.error));
         throw new Error('Push verification failed');
       }
 
