@@ -33,12 +33,33 @@ const log = {
   }
 };
 
+const normalizeGitHubUrl = (url: string): string => {
+  try {
+    // Remove any trailing slashes or .git extension
+    let normalizedUrl = url.trim().replace(/\.git$/, '').replace(/\/$/, '');
+    
+    // Remove any port numbers or colons
+    normalizedUrl = normalizedUrl.replace(/:\d+/, '');
+    
+    // Ensure the URL starts with https://
+    if (!normalizedUrl.startsWith('http')) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+    
+    return normalizedUrl;
+  } catch (error) {
+    console.error('Error normalizing GitHub URL:', error);
+    throw error;
+  }
+};
+
 async function getRepoDetails(url: string, octokit: Octokit) {
   const logs = [];
   try {
-    logs.push(log.info('Starting repository details fetch', { url }));
+    const normalizedUrl = normalizeGitHubUrl(url);
+    logs.push(log.info('Starting repository details fetch', { originalUrl: url, normalizedUrl }));
     
-    const { owner, repo } = parseGitHubUrl(url);
+    const { owner, repo } = parseGitHubUrl(normalizedUrl);
     logs.push(log.info('Parsed GitHub URL', { owner, repo }));
 
     const [repoInfo, branches, lastCommits] = await Promise.all([
@@ -183,13 +204,17 @@ serve(async (req) => {
         throw new Error('Repository not found');
       }
 
+      // Normalize URLs before processing
+      const normalizedSourceUrl = normalizeGitHubUrl(sourceRepo.url);
+      const normalizedTargetUrl = normalizeGitHubUrl(targetRepo.url);
+
       logs.push(log.info('Repositories found', {
-        source: { url: sourceRepo.url, branch: sourceRepo.default_branch },
-        target: { url: targetRepo.url, branch: targetRepo.default_branch }
+        source: { url: normalizedSourceUrl, branch: sourceRepo.default_branch },
+        target: { url: normalizedTargetUrl, branch: targetRepo.default_branch }
       }));
 
       // Get latest commit from source
-      const sourceDetails = await getRepoDetails(sourceRepo.url, octokit);
+      const sourceDetails = await getRepoDetails(normalizedSourceUrl, octokit);
       logs.push(...sourceDetails.logs);
 
       const sourceCommit = sourceDetails.details.lastCommits[0];
@@ -205,7 +230,7 @@ serve(async (req) => {
       }));
 
       // Update target repository
-      const { owner: targetOwner, repo: targetRepoName } = parseGitHubUrl(targetRepo.url);
+      const { owner: targetOwner, repo: targetRepoName } = parseGitHubUrl(normalizedTargetUrl);
       const branchRef = `refs/heads/${targetRepo.default_branch || 'main'}`;
       
       try {
@@ -219,7 +244,7 @@ serve(async (req) => {
         );
 
         logs.push(log.success('Push operation completed', {
-          targetRepo: targetRepo.url,
+          targetRepo: normalizedTargetUrl,
           ref: updateRef.data.ref,
           sha: updateRef.data.object.sha
         }));
@@ -262,7 +287,8 @@ serve(async (req) => {
         throw new Error('Repository URL not found');
       }
 
-      const repoDetails = await getRepoDetails(repoData.url, octokit);
+      const normalizedUrl = normalizeGitHubUrl(repoData.url);
+      const repoDetails = await getRepoDetails(normalizedUrl, octokit);
       logs.push(...repoDetails.logs);
 
       const lastCommit = repoDetails.details.lastCommits[0];
